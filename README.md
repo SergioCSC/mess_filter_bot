@@ -1,167 +1,312 @@
-# Telegram Keyword Filter Bot
+# Telegram Keyword Bot - Google Cloud Functions
 
-A simple Telegram bot that monitors incoming messages and forwards them to you if they contain a specific keyword.
+Simple serverless Telegram bot that forwards messages containing a keyword.
 
-## Features
-- ✅ Monitors all messages sent to the bot
-- 🔍 Case-insensitive keyword matching
-- 📨 Forwards matching messages to your Telegram
-- 🌐 Includes health check endpoint for uptime monitoring
-- 🔒 Secure environment variable configuration
+## Requirements
 
-## Prerequisites
-1. Python 3.9+ (for local testing)
-2. A Telegram account
-3. A GitHub account
-4. A Render.com account (free)
+- Google account
+- Credit card (for GCP verification - won't be charged on free tier)
+- 10 minutes of setup time
 
-## Setup Instructions
+## What You Get
 
-### Step 1: Create Your Telegram Bot
-1. Open Telegram and search for `@BotFather`
-2. Send `/newbot` command
-3. Follow the instructions to name your bot
-4. **Save the bot token** - you'll need it later (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+- **100% serverless** - no servers to manage
+- **Instant triggers** - webhook-based, responds immediately
+- **Free forever** - 2M requests/month free tier (you'll use ~0.1%)
+- **Auto-scaling** - handles any load automatically
 
-### Step 2: Get Your Telegram ID
-1. Search for `@userinfobot` on Telegram
-2. Start a conversation with it
-3. It will send you your Telegram ID (a number like `123456789`)
-4. **Save this ID** - you'll need it later
+---
 
-### Step 3: Prepare Your Code
-1. Create a new repository on GitHub
-2. Upload these files to your repository:
-   - `bot.py`
-   - `requirements.txt`
-3. Your repository is now ready!
+## Setup Guide
 
-### Step 4: Deploy to Render.com
-
-1. **Sign up** at [render.com](https://render.com) (it's free!)
-
-2. **Create a New Web Service:**
-   - Click "New +" → "Web Service"
-   - Connect your GitHub repository
-   - Select your bot repository
-
-3. **Configure the service:**
-   - **Name:** Choose any name (e.g., `telegram-keyword-bot`)
-   - **Environment:** Python
-   - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `python bot.py`
-   - **Plan:** Free
-
-4. **Add Environment Variables:**
-   Click "Environment" and add these variables:
-   
-   | Key | Value |
-   |-----|-------|
-   | `BOT_TOKEN` | Your bot token from @BotFather |
-   | `YOUR_TELEGRAM_ID` | Your Telegram ID from @userinfobot |
-   | `KEYWORD` | The keyword to monitor (e.g., `urgent`) |
-
-5. **Deploy!** Click "Create Web Service"
-
-Render will build and deploy your bot. This takes 2-3 minutes.
-
-### Step 5: Set Up Cron Job (Keep Bot Awake)
-
-Render's free tier sleeps after 15 minutes of inactivity. Use a cron job to ping it:
-
-1. **Go to [cron-job.org](https://cron-job.org)**
-2. **Sign up** for free
-3. **Create a new cron job:**
-   - Title: `Keep Telegram Bot Awake`
-   - URL: Your Render service URL (e.g., `https://your-bot-name.onrender.com/health`)
-   - Schedule: Every 10 minutes
-   - Click "Create"
-
-Your bot will now stay awake 24/7!
-
-### Step 6: Test Your Bot
-
-1. Open Telegram and search for your bot by username
-2. Start a conversation: `/start`
-3. Send a message containing your keyword
-4. You should receive a forwarded message in your Telegram!
-
-## How It Works
-
-```
-User → Sends message to bot → Bot checks for keyword → If found → Forwards to you
-```
-
-The bot:
-1. Listens for all text messages
-2. Checks if the message contains your keyword (case-insensitive)
-3. If yes, sends you a notification with:
-   - The keyword that was found
-   - Who sent it (name, username, ID)
-   - The full message text
-
-## Environment Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `BOT_TOKEN` | Your Telegram bot token from @BotFather | `123456:ABCdef...` |
-| `YOUR_TELEGRAM_ID` | Your personal Telegram user ID | `123456789` |
-| `KEYWORD` | Keyword to filter (case-insensitive) | `urgent` |
-| `PORT` | Port for health check server (auto-set by Render) | `8080` |
-
-## Local Testing (Optional)
-
-If you want to test locally before deploying:
+### 1. Create Telegram Bot
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# On Telegram:
+# 1. Message @BotFather
+# 2. Send: /newbot
+# 3. Follow prompts
+# 4. Save your bot token
 
-# Create .env file (don't commit this!)
-cp .env.example .env
-# Edit .env with your actual values
-
-# Run the bot
-export $(cat .env | xargs) && python bot.py
+# Get your Telegram ID:
+# Message @userinfobot
+# Save the ID it gives you
 ```
 
-## Security Notes
+### 2. Set Up Google Cloud
 
-- ✅ Never commit your `.env` file or tokens to GitHub
-- ✅ Always use environment variables on Render (they're encrypted)
-- ✅ Your bot token and Telegram ID are safe on Render
-- ✅ The `.env.example` file is safe to commit (it has no real values)
+#### Install gcloud CLI
+
+**macOS:**
+```bash
+brew install --cask google-cloud-sdk
+```
+
+**Windows:**  
+Download from: https://cloud.google.com/sdk/docs/install
+
+**Linux:**
+```bash
+curl https://sdk.cloud.google.com | bash
+exec -l $SHELL
+```
+
+#### Configure GCP
+
+```bash
+# Login
+gcloud auth login
+
+# Create new project
+gcloud projects create telegram-bot-$(date +%s) --name="Telegram Bot"
+
+# Set project (use the ID from above, or your existing project)
+gcloud config set project telegram-bot-XXXXXX
+
+# Enable required APIs
+gcloud services enable cloudfunctions.googleapis.com
+gcloud services enable cloudbuild.googleapis.com
+
+# Enable billing (required even for free tier)
+# Go to: console.cloud.google.com/billing
+# Link your project to billing account
+```
+
+### 3. Deploy Bot
+
+```bash
+# Navigate to your bot directory
+cd /path/to/bot/files
+
+# Deploy (replace with your actual values)
+gcloud functions deploy telegram-webhook \
+  --gen2 \
+  --runtime=python312 \
+  --region=us-central1 \
+  --trigger-http \
+  --allow-unauthenticated \
+  --entry-point=telegram_webhook \
+  --set-env-vars=BOT_TOKEN=your_bot_token,YOUR_TELEGRAM_ID=your_telegram_id,KEYWORD=urgent
+```
+
+**Example:**
+```bash
+gcloud functions deploy telegram-webhook \
+  --gen2 \
+  --runtime=python312 \
+  --region=us-central1 \
+  --trigger-http \
+  --allow-unauthenticated \
+  --entry-point=telegram_webhook \
+  --set-env-vars=BOT_TOKEN=123456:ABCdef,YOUR_TELEGRAM_ID=987654321,KEYWORD=urgent
+```
+
+Deployment takes ~2 minutes. You'll see:
+```
+...
+url: https://us-central1-PROJECT.cloudfunctions.net/telegram-webhook
+...
+```
+
+**Save this URL!**
+
+### 4. Set Webhook
+
+```bash
+# Replace YOUR_BOT_TOKEN and YOUR_FUNCTION_URL
+curl -X POST https://api.telegram.org/botYOUR_BOT_TOKEN/setWebhook \
+  -H "Content-Type: application/json" \
+  -d '{"url":"YOUR_FUNCTION_URL"}'
+```
+
+**Example:**
+```bash
+curl -X POST https://api.telegram.org/bot123456:ABCdef/setWebhook \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://us-central1-telegram-bot-123.cloudfunctions.net/telegram-webhook"}'
+```
+
+You should see:
+```json
+{"ok":true,"result":true,"description":"Webhook was set"}
+```
+
+### 5. Test
+
+1. Open Telegram
+2. Find your bot and send `/start`
+3. Send a message with your keyword: "This is urgent!"
+4. You should receive an alert!
+
+---
+
+## Usage
+
+### View Logs
+
+```bash
+gcloud functions logs read telegram-webhook --gen2 --region=us-central1 --limit=50
+```
+
+### Update Keyword
+
+```bash
+gcloud functions deploy telegram-webhook \
+  --gen2 \
+  --update-env-vars=KEYWORD=new_keyword
+```
+
+### Check Webhook Status
+
+```bash
+curl https://api.telegram.org/botYOUR_TOKEN/getWebhookInfo
+```
+
+### Delete Function
+
+```bash
+gcloud functions delete telegram-webhook --gen2 --region=us-central1
+```
+
+---
 
 ## Troubleshooting
 
 **Bot not responding?**
-- Check Render logs for errors
-- Verify your BOT_TOKEN is correct
-- Make sure your bot is not blocked by Telegram
+```bash
+# Check logs
+gcloud functions logs read telegram-webhook --gen2 --region=us-central1
 
-**Not receiving forwarded messages?**
-- Verify YOUR_TELEGRAM_ID is correct
-- Check if you've started a conversation with the bot
-- Look at Render logs for delivery errors
+# Verify webhook
+curl https://api.telegram.org/botYOUR_TOKEN/getWebhookInfo
 
-**Bot going to sleep?**
-- Ensure cron-job.org is pinging your URL every 10 minutes
-- Check the cron job execution history
+# Test function
+curl https://YOUR_FUNCTION_URL
+# Should return: "Bot is running"
+```
+
+**Deployment failed?**
+```bash
+# Ensure APIs are enabled
+gcloud services enable cloudfunctions.googleapis.com cloudbuild.googleapis.com
+
+# Ensure billing is linked
+gcloud billing projects describe $(gcloud config get project)
+```
+
+**Permission denied?**
+```bash
+# Make function public
+gcloud functions add-iam-policy-binding telegram-webhook \
+  --gen2 \
+  --region=us-central1 \
+  --member="allUsers" \
+  --role="roles/cloudfunctions.invoker"
+```
+
+---
 
 ## Cost
 
-**100% FREE!**
-- Render: Free tier (750 hours/month)
-- cron-job.org: Free forever
-- Telegram Bot API: Free
+**Free Tier (Always Free):**
+- 2 million requests/month
+- 400,000 GB-seconds compute
+- 200,000 GHz-seconds CPU
+
+**Your bot's usage:**
+- ~100 messages/day = 3,000 requests/month
+- **= $0.00** (0.15% of free tier)
+
+Even with 1,000 messages/day you'll stay free.
+
+**After $300 trial:** Always Free tier continues forever.
+
+---
+
+## Files
+
+```
+.
+├── main.py           # Bot logic
+└── requirements.txt  # Dependencies
+```
+
+That's it! Simple and clean.
+
+---
+
+## Environment Variables
+
+Set during deployment with `--set-env-vars`:
+
+- `BOT_TOKEN` - From @BotFather
+- `YOUR_TELEGRAM_ID` - From @userinfobot  
+- `KEYWORD` - What to monitor (case-insensitive)
+
+---
+
+## Modern Python Features Used
+
+- Type hints
+- F-strings
+- Walrus operator ready (Python 3.12)
+- Exception chaining
+- JSON built-in
+- Dict unpacking
+
+---
+
+## Security
+
+✅ Environment variables encrypted by GCP  
+✅ HTTPS only  
+✅ No secrets in code  
+✅ Minimal dependencies  
+✅ Public webhook (Telegram only knows URL)
+
+---
 
 ## Need Help?
 
-Check the logs on Render:
-1. Go to your service dashboard
-2. Click "Logs" tab
-3. Look for error messages
+**Check logs first:**
+```bash
+gcloud functions logs read telegram-webhook --gen2 --region=us-central1 --limit=50
+```
 
-## License
+**Verify webhook:**
+```bash
+curl https://api.telegram.org/botTOKEN/getWebhookInfo
+```
 
-MIT License - feel free to modify and use!
+**Test function:**
+```bash
+curl YOUR_FUNCTION_URL
+```
+
+---
+
+## Quick Commands
+
+```bash
+# Deploy
+gcloud functions deploy telegram-webhook --gen2 --runtime=python312 --region=us-central1 --trigger-http --allow-unauthenticated --entry-point=telegram_webhook --set-env-vars=BOT_TOKEN=x,YOUR_TELEGRAM_ID=y,KEYWORD=z
+
+# Logs
+gcloud functions logs read telegram-webhook --gen2 --region=us-central1
+
+# Update keyword
+gcloud functions deploy telegram-webhook --gen2 --update-env-vars=KEYWORD=new
+
+# Delete
+gcloud functions delete telegram-webhook --gen2 --region=us-central1
+
+# Set webhook
+curl -X POST https://api.telegram.org/botTOKEN/setWebhook -d '{"url":"URL"}'
+
+# Check webhook
+curl https://api.telegram.org/botTOKEN/getWebhookInfo
+```
+
+---
+
+**Done! Your serverless bot is live.** 🚀
